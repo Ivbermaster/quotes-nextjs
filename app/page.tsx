@@ -216,7 +216,7 @@ export default function Home() {
   return (
     <div
       className="flex flex-col items-center justify-center h-screen px-4"
-      style={{ position: "relative", zIndex: 1, backgroundColor: bgColor, transition: "background-color 10s ease" }}
+      style={{ position: "relative", zIndex: 1, backgroundColor: bgColor, transition: "background-color 10s linear" }}
     >
       <div className="max-w-3xl w-full quote-container">
         <h1 ref={quoteEl} className="text-4xl md:text-6xl font-serif text-white leading-snug px-4 text-center">

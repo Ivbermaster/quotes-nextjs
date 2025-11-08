@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.grainy-bg {
+  position: relative;
+}
+
+.grainy-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;              /* ниже контента страницы */
+  pointer-events: none;     /* не блокирует клики/выделение */
+  background-color: transparent;
+  /* SVG noise (fractalNoise). Источник приёма — ibelick. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23a)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 182px;   /* меньше — зерно мельче; больше — крупнее */
+  opacity: 0.12;            /* интенсивность зерна */
+}
+
+.split-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+#__next, main, .page-root, [data-page-root] { position: relative; z-index: 1; }
+/* опционально: если слово слишком длинное, разрешить мягкий перенос по дефису */
+.split-word {
+  hyphens: manual; /* не авто-разделять */
+}
+
+/* на всякий случай базовые настройки контейнера цитаты */
+.quote-container {
+  word-break: normal;     /* не ломать слова */
+  overflow-wrap: normal;  /* не форсировать перенос длинных слов */
+}

@@ -7,6 +7,8 @@ import { Prisma } from "@prisma/client";
 import crypto from "node:crypto";
 import { jsonSafe } from "@/lib/json";
 
+type QRow = { id: bigint; text: string; author: string; categories: string[] };
+
 function hashToIndex(key: string, mod: number) {
   const h = crypto.createHash("sha256").update(key).digest();
   const n = h.readUIntBE(0, 6);
@@ -25,22 +27,17 @@ export async function GET(req: Request) {
 
     const clauses: Prisma.Sql[] = [Prisma.sql`1=1`];
     if (maxLen) clauses.push(Prisma.sql`char_length(text) <= ${maxLen}`);
-    const WHERE = Prisma.join(clauses, ' AND ');
+    const WHERE = Prisma.join(clauses, " AND ");
 
-    // count
     const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>(
       Prisma.sql`SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE ${WHERE};`
     );
     const total = Number(count ?? BigInt(0));
     if (total === 0) return jsonSafe(null);
 
-    // stable index
     const idx = hashToIndex(`${user}:${date}`, total);
 
-    // pick one
-    const rows = await prisma.$queryRaw<
-      { id: bigint; text: string; author: string; categories: string[] }[]
-    >(Prisma.sql`
+    const rows = await prisma.$queryRaw<QRow[]>(Prisma.sql`
       SELECT id, text, author, categories
       FROM "Quote"
       WHERE ${WHERE}
@@ -51,7 +48,6 @@ export async function GET(req: Request) {
     const q = rows[0] ? { ...rows[0], id: rows[0].id.toString() } : null;
     return jsonSafe(q);
   } catch (e: any) {
-    // Вернём понятную ошибку и статус 500
     return jsonSafe({ error: "of-the-day failed", message: String(e?.message || e) }, { status: 500 });
   }
 }

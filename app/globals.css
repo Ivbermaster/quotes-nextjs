@@ -47,7 +47,7 @@ body {
   display: inline-block;
   white-space: nowrap;
 }
-#__next, main, .page-root, [data-page-root] { position: relative; z-index: 1; }
+
 /* опционально: если слово слишком длинное, разрешить мягкий перенос по дефису */
 .split-word {
   hyphens: manual; /* не авто-разделять */

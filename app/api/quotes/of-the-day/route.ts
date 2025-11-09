@@ -1,4 +1,3 @@
-// Node runtime, без кэша
 export const runtime = "nodejs";
 export const revalidate = 0;
 
@@ -25,7 +24,8 @@ export async function GET(req: Request) {
     const maxLenNum = maxLenParam ? Number(maxLenParam) : undefined;
     const maxLen = maxLenNum && Number.isFinite(maxLenNum) ? Math.max(1, Math.floor(maxLenNum)) : undefined;
 
-    const clauses: Prisma.Sql[] = [Prisma.sql`1=1`];
+    // БЕЗ явного Prisma.Sql[]
+    const clauses = [Prisma.sql`1=1`];
     if (maxLen) clauses.push(Prisma.sql`char_length(text) <= ${maxLen}`);
     const WHERE = Prisma.join(clauses, " AND ");
 

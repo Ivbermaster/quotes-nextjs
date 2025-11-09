@@ -3,25 +3,25 @@ import { jsonSafe } from "@/lib/json";
 import { getUserId } from "@/lib/session";
 
 type FavoriteIdRow = { quoteId: bigint };
+type QuoteRow = { id: bigint; text: string; author: string; categories: string[] };
 
 export async function GET() {
   const userId = await getUserId();
 
-  // берём только quoteId с явным типом
   const favs: FavoriteIdRow[] = await prisma.favorite.findMany({
     where: { userId },
     select: { quoteId: true },
   });
 
-  const ids = favs.map(r => r.quoteId);
+  const ids = favs.map((r) => r.quoteId);
   if (ids.length === 0) return jsonSafe([]);
 
-  const rows = await prisma.quote.findMany({
+  const rows: QuoteRow[] = await prisma.quote.findMany({
     where: { id: { in: ids } },
     select: { id: true, text: true, author: true, categories: true },
   });
 
-  const quotes = rows.map(r => ({ ...r, id: r.id.toString() }));
+  const quotes = rows.map((r) => ({ ...r, id: r.id.toString() }));
   return jsonSafe(quotes);
 }
 

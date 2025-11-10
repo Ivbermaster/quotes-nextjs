@@ -320,7 +320,7 @@ export default function QuoteScreen({ buildUrl, keySeed, category, showNext = tr
           {author ? `— ${author}` : "\u00A0"}
         </p>
       </div>
-      <div className="mt-16 flex items-center">
+      <div className="mt-16 flex items-center gap-2">
         {showNext && (
             <button
             ref={btnRef}

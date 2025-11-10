@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "prisma generate",
     "build": "next build",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "import:csv": "node scripts/import.mjs"

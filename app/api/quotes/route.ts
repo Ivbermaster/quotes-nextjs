@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       prisma.quote.count({ where }),
     ]);
 
-    const data = rows.map(r => ({ ...r, id: r.id.toString() }));
+    const data = rows.map((r: ListRow) => ({ ...r, id: r.id.toString() }));
     return jsonSafe({ data, page, per, total });
   }
 

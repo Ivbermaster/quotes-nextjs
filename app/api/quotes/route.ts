@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { jsonSafe } from "@/lib/json";
 
 type ListRow = { id: bigint; text: string; author: string; categories: string[] };
@@ -21,31 +20,130 @@ export async function GET(req: Request) {
   const maxLenParam = searchParams.get("maxLen");
   const maxLen = maxLenParam ? Math.max(1, Number(maxLenParam)) : undefined;
 
-  // БЕЗ явного Prisma.Sql[]
-  const clauses = [Prisma.sql`1=1`];
-  if (author) clauses.push(Prisma.sql`author = ${author}`);
-  if (categories.length === 1) {
-    clauses.push(Prisma.sql`${categories[0]} = ANY(categories)`);
-  } else if (categories.length > 1) {
-    const arr = `ARRAY[${categories.map(c => `'${c.replace(/'/g, "''")}'`).join(",")}]::text[]`;
-    clauses.push(Prisma.sql`categories && ${Prisma.raw(arr)}`);
+  // ВЕТКА 1: без maxLen — чистый Prisma where
+  if (!maxLen) {
+    const where: any = {};
+    if (author) where.author = author;
+    if (categories.length === 1) where.categories = { has: categories[0] };
+    if (categories.length > 1)  where.categories = { hasSome: categories };
+
+    const [rows, total] = await Promise.all([
+      prisma.quote.findMany({
+        where, skip, take: per,
+        orderBy: { id: "desc" },
+        select: { id: true, text: true, author: true, categories: true },
+      }),
+      prisma.quote.count({ where }),
+    ]);
+
+    const data = rows.map(r => ({ ...r, id: r.id.toString() }));
+    return jsonSafe({ data, page, per, total });
   }
-  if (maxLen) clauses.push(Prisma.sql`char_length(text) <= ${maxLen}`);
 
-  const WHERE = Prisma.join(clauses, " AND ");
+  // ВЕТКА 2: есть maxLen — используем $queryRaw без Prisma.sql, но с параметрами
+  const hasAuthor = !!author;
+  const catsLen = categories.length;
 
-  const rows = await prisma.$queryRaw<ListRow[]>(Prisma.sql`
-    SELECT id, text, author, categories
-    FROM "Quote"
-    WHERE ${WHERE}
-    ORDER BY RANDOM()
-    OFFSET ${skip} LIMIT ${per};
-  `);
+  let rows: ListRow[] = [];
+  let countRows: { count: bigint }[] = [];
 
-  const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>(
-    Prisma.sql`SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE ${WHERE};`
-  );
+  if (!hasAuthor && catsLen === 0) {
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen};
+    `;
+  } else if (hasAuthor && catsLen === 0) {
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author}
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author};
+    `;
+  } else if (!hasAuthor && catsLen === 1) {
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND ${categories[0]} = ANY(categories)
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND ${categories[0]} = ANY(categories);
+    `;
+  } else if (hasAuthor && catsLen === 1) {
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author}
+        AND ${categories[0]} = ANY(categories)
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author}
+        AND ${categories[0]} = ANY(categories);
+    `;
+  } else if (!hasAuthor && catsLen > 1) {
+    // В PG можно передать JS-массив и привести к text[]
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND categories && ${categories as any}::text[]
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND categories && ${categories as any}::text[];
+    `;
+  } else {
+    // hasAuthor && catsLen > 1
+    rows = await prisma.$queryRaw<ListRow[]>`
+      SELECT id, text, author, categories
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author}
+        AND categories && ${categories as any}::text[]
+      ORDER BY id DESC
+      OFFSET ${skip} LIMIT ${per};
+    `;
+    countRows = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Quote"
+      WHERE char_length(text) <= ${maxLen}
+        AND author = ${author}
+        AND categories && ${categories as any}::text[];
+    `;
+  }
 
-  const data = rows.map((r) => ({ ...r, id: r.id.toString() }));
-  return jsonSafe({ data, page, per, total: Number(count) });
+  const total = Number(countRows[0]?.count ?? BigInt(0));
+  const data = rows.map(r => ({ ...r, id: r.id.toString() }));
+  return jsonSafe({ data, page, per, total });
 }

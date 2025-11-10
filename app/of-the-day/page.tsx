@@ -1,3 +1,4 @@
+"use client";
 import CategoriesDrawer from "@/components/CategoriesDrawer";
 import QuoteScreen from "@/components/QuoteScreen";
 

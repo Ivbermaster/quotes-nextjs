@@ -2,7 +2,6 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import crypto from "node:crypto";
 import { jsonSafe } from "@/lib/json";
 
@@ -22,28 +21,44 @@ export async function GET(req: Request) {
 
     const maxLenParam = url.searchParams.get("maxLen");
     const maxLenNum = maxLenParam ? Number(maxLenParam) : undefined;
-    const maxLen = maxLenNum && Number.isFinite(maxLenNum) ? Math.max(1, Math.floor(maxLenNum)) : undefined;
+    const maxLen =
+      maxLenNum && Number.isFinite(maxLenNum) ? Math.max(1, Math.floor(maxLenNum)) : undefined;
 
-    // БЕЗ явного Prisma.Sql[]
-    const clauses = [Prisma.sql`1=1`];
-    if (maxLen) clauses.push(Prisma.sql`char_length(text) <= ${maxLen}`);
-    const WHERE = Prisma.join(clauses, " AND ");
-
-    const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>(
-      Prisma.sql`SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE ${WHERE};`
-    );
-    const total = Number(count ?? BigInt(0));
+    // COUNT
+    let total = 0;
+    if (maxLen) {
+      const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE char_length(text) <= ${maxLen};
+      `;
+      total = Number(count ?? BigInt(0));
+    } else {
+      const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count FROM "Quote";
+      `;
+      total = Number(count ?? BigInt(0));
+    }
     if (total === 0) return jsonSafe(null);
 
     const idx = hashToIndex(`${user}:${date}`, total);
 
-    const rows = await prisma.$queryRaw<QRow[]>(Prisma.sql`
-      SELECT id, text, author, categories
-      FROM "Quote"
-      WHERE ${WHERE}
-      ORDER BY id ASC
-      LIMIT 1 OFFSET ${idx};
-    `);
+    // SELECT с OFFSET
+    let rows: QRow[];
+    if (maxLen) {
+      rows = await prisma.$queryRaw<QRow[]>`
+        SELECT id, text, author, categories
+        FROM "Quote"
+        WHERE char_length(text) <= ${maxLen}
+        ORDER BY id ASC
+        LIMIT 1 OFFSET ${idx};
+      `;
+    } else {
+      rows = await prisma.$queryRaw<QRow[]>`
+        SELECT id, text, author, categories
+        FROM "Quote"
+        ORDER BY id ASC
+        LIMIT 1 OFFSET ${idx};
+      `;
+    }
 
     const q = rows[0] ? { ...rows[0], id: rows[0].id.toString() } : null;
     return jsonSafe(q);

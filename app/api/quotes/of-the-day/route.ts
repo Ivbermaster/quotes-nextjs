@@ -1,11 +1,11 @@
-// Node runtime, без кэша
 export const runtime = "nodejs";
 export const revalidate = 0;
 
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import crypto from "node:crypto";
 import { jsonSafe } from "@/lib/json";
+
+type QRow = { id: bigint; text: string; author: string; categories: string[] };
 
 function hashToIndex(key: string, mod: number) {
   const h = crypto.createHash("sha256").update(key).digest();
@@ -21,37 +21,48 @@ export async function GET(req: Request) {
 
     const maxLenParam = url.searchParams.get("maxLen");
     const maxLenNum = maxLenParam ? Number(maxLenParam) : undefined;
-    const maxLen = maxLenNum && Number.isFinite(maxLenNum) ? Math.max(1, Math.floor(maxLenNum)) : undefined;
+    const maxLen =
+      maxLenNum && Number.isFinite(maxLenNum) ? Math.max(1, Math.floor(maxLenNum)) : undefined;
 
-    const clauses: Prisma.Sql[] = [Prisma.sql`1=1`];
-    if (maxLen) clauses.push(Prisma.sql`char_length(text) <= ${maxLen}`);
-    const WHERE = Prisma.join(clauses, ' AND ');
-
-    // count
-    const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>(
-      Prisma.sql`SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE ${WHERE};`
-    );
-    const total = Number(count ?? BigInt(0));
+    // COUNT
+    let total = 0;
+    if (maxLen) {
+      const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count FROM "Quote" WHERE char_length(text) <= ${maxLen};
+      `;
+      total = Number(count ?? BigInt(0));
+    } else {
+      const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count FROM "Quote";
+      `;
+      total = Number(count ?? BigInt(0));
+    }
     if (total === 0) return jsonSafe(null);
 
-    // stable index
     const idx = hashToIndex(`${user}:${date}`, total);
 
-    // pick one
-    const rows = await prisma.$queryRaw<
-      { id: bigint; text: string; author: string; categories: string[] }[]
-    >(Prisma.sql`
-      SELECT id, text, author, categories
-      FROM "Quote"
-      WHERE ${WHERE}
-      ORDER BY id ASC
-      LIMIT 1 OFFSET ${idx};
-    `);
+    // SELECT с OFFSET
+    let rows: QRow[];
+    if (maxLen) {
+      rows = await prisma.$queryRaw<QRow[]>`
+        SELECT id, text, author, categories
+        FROM "Quote"
+        WHERE char_length(text) <= ${maxLen}
+        ORDER BY id ASC
+        LIMIT 1 OFFSET ${idx};
+      `;
+    } else {
+      rows = await prisma.$queryRaw<QRow[]>`
+        SELECT id, text, author, categories
+        FROM "Quote"
+        ORDER BY id ASC
+        LIMIT 1 OFFSET ${idx};
+      `;
+    }
 
     const q = rows[0] ? { ...rows[0], id: rows[0].id.toString() } : null;
     return jsonSafe(q);
   } catch (e: any) {
-    // Вернём понятную ошибку и статус 500
     return jsonSafe({ error: "of-the-day failed", message: String(e?.message || e) }, { status: 500 });
   }
 }

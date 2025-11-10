@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { jsonSafe } from "@/lib/json";
 
-async function pickRandom() {
-  const [{ min, max }] = await prisma.$queryRaw<{min: bigint, max: bigint}[]>`
+type QRow = { id: bigint; text: string; author: string; categories: string[] };
+
+async function pickRandom(): Promise<{ id: string; text: string; author: string; categories: string[] } | null> {
+  const [{ min, max }] = await prisma.$queryRaw<{ min: bigint; max: bigint }[]>`
     SELECT MIN(id)::bigint AS min, MAX(id)::bigint AS max FROM "Quote"
   `;
   const minN = Number(min ?? BigInt(1));
@@ -13,13 +15,13 @@ async function pickRandom() {
     const rnd = Math.floor(Math.random() * (maxN - minN + 1)) + minN;
     const q = await prisma.quote.findFirst({
       where: { id: { gte: BigInt(rnd) } },
-      select: { id: true, text: true, author: true, categories: true }
+      select: { id: true, text: true, author: true, categories: true },
     });
     if (q) return { ...q, id: q.id.toString() };
   }
   const first = await prisma.quote.findFirst({
     orderBy: { id: "asc" },
-    select: { id: true, text: true, author: true, categories: true }
+    select: { id: true, text: true, author: true, categories: true },
   });
   return first ? { ...first, id: first.id.toString() } : null;
 }
